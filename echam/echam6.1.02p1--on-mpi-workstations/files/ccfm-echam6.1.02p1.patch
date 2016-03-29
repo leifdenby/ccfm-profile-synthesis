@@ -1,0 +1,379 @@
+diff --git a/src/Makefile b/src/Makefile
+index d8aba82..6ad19bf 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -140,8 +140,8 @@ cuasct.o: mo_constants.o mo_control.o mo_cumulus_flux.o mo_kind.o \
+ 	mo_profile.o mo_time_control.o
+ cubase.o: mo_constants.o mo_cumulus_flux.o mo_kind.o
+ cubasmc.o: mo_constants.o mo_cumulus_flux.o mo_kind.o
+-cucall.o: mo_constants.o mo_convect_tables.o mo_kind.o mo_param_switches.o \
+-	mo_time_control.o
++cucall.o: mo_constants.o mo_control.o mo_convect_tables.o mo_kind.o \
++	mo_param_switches.o mo_time_control.o
+ cuddraf.o: mo_constants.o mo_cumulus_flux.o mo_kind.o mo_param_switches.o
+ cudlfs.o: mo_constants.o mo_cumulus_flux.o mo_kind.o mo_param_switches.o
+ cudtdq.o: mo_constants.o mo_kind.o mo_param_switches.o mo_submodel.o \
+@@ -588,8 +588,9 @@ mo_sub_echam.o: mo_kind.o mo_time_control.o mo_tracdef.o
+ mo_sub_nml.o: mo_exception.o mo_kind.o mo_memory_base.o mo_mpi.o \
+ 	mo_namelist.o mo_time_control.o mo_time_event.o mo_tracdef.o \
+ 	mo_tracer.o
+-mo_submodel.o: mo_advection.o mo_exception.o mo_kind.o mo_mpi.o mo_namelist.o \
+-	mo_tracdef.o mo_util_string.o $(INCLUDE)/submodelctl.inc
++mo_submodel.o: mo_advection.o mo_control.o mo_exception.o mo_kind.o mo_mpi.o \
++	mo_namelist.o mo_tracdef.o mo_util_string.o \
++	$(INCLUDE)/submodelctl.inc
+ mo_submodel_diag.o: mo_exception.o mo_kind.o mo_linked_list.o \
+ 	mo_memory_base.o mo_species.o mo_tracdef.o
+ mo_submodel_interface.o: mo_co2.o mo_constants.o mo_control.o mo_exception.o \
+diff --git a/src/cucall.f90 b/src/cucall.f90
+index 80e2020..3bb7288 100644
+--- a/src/cucall.f90
++++ b/src/cucall.f90
+@@ -18,8 +18,11 @@ SUBROUTINE cucall(   kproma, kbdim, klev, klevp1, klevm1, ilab,      &
+ !--- Included for prognostic CDNC/IC scheme --------------------------
+                      pcvcbot,  pwcape,                               &
+                      pxtecl,   pxteci,   pxtecnl,  pxtecni,          &
+-                     ptkem1                                          )
++                     ptkem1,                                         &
+ !--- End Included for CDNC/IC ----------------------------------------
++!--- Included for CCFM convection scheme
++                     pgpblh                        )
++!--- End included for CCFM convection scheme
+ !
+ !
+ !          *CUCALL* - MASTER ROUTINE - PROVIDES INTERFACE FOR:
+@@ -54,6 +57,10 @@ SUBROUTINE cucall(   kproma, kbdim, klev, klevp1, klevm1, ilab,      &
+   USE mo_convect_tables, ONLY: prepare_ua_index,lookup_ua
+ #endif
+ 
++!--- Included for CCFM convection scheme
++  USE mo_control,        ONLY: lccfm
++  USE mo_ccfm_echam,     ONLY: ccfm_echam
++!--- End included for CCFM convection scheme
+   IMPLICIT NONE
+ 
+   INTEGER, INTENT (IN) :: klev, klevm1, klevp1, kproma, kbdim, ktrac
+@@ -104,6 +111,10 @@ SUBROUTINE cucall(   kproma, kbdim, klev, klevp1, klevm1, ilab,      &
+              ptkem1(kbdim,klev)
+ !--- End Included for CDNC/IC ----------------------------------------
+ 
++!--- Included for CCFM convection scheme
++  REAL(dp):: pgpblh(kbdim)
++!--- End included for CCFM convection scheme
++
+   !  Executable statements 
+ 
+ !
+@@ -160,6 +171,8 @@ SUBROUTINE cucall(   kproma, kbdim, klev, klevp1, klevm1, ilab,      &
+ !*           -----------------------------------------------------------
+ !
+ !
++!--- Disable default convection scheme if using CCFM
++ if (.not. lccfm) then
+   SELECT CASE (iconv)
+   CASE(1)
+      CALL cumastr(kproma, kbdim, klev, klevp1, klevm1, ilab,           &
+@@ -223,6 +236,44 @@ SUBROUTINE cucall(   kproma, kbdim, klev, klevp1, klevm1, ilab,      &
+ !--- End Included for CDNC/IC ------------------------------------------
+ 
+   END SELECT
++
++ else !-- Use CCFM convection scheme
++
++   call ccfm_echam(kproma,          & ! in
++                   kbdim,           & ! -
++                   klev,            & ! -
++                   klevp1,          & ! -
++                   krow,            & ! -
++                   ktrac,           & ! -
++
++                   ztmst,           & ! dtime inside CCFM
++                   ptm1,            & ! -
++                   pqm1,            & ! -
++                   zqsat,           & ! -
++                   papp1,           & ! -
++                   paphp1,          & ! -
++                   pgeo,            & ! -
++                   zup1,            & ! -
++                   zvp1,            & ! -
++                   ptkem1,          & ! -
++                   ldland,          & ! -
++                   pgpblh,          & ! -
++
++                   ptte,            & ! inout
++                   pqte,            & ! inout
++                   pxtec,           & ! inout
++                   pqtec,           & ! inout
++                   ptopmax,         & ! inout
++                   paprc,   paprs,  & ! inout
++                   prsfc,   pssfc,  & ! inout
++                   pvom,    pvol,   & ! inout
++                   zxtp1,   pxtte,  & ! inout
++                   ktype)             ! inout
++
++    ilab(1:kproma,1:klev) = 0              ! for cloud top definition below
++  end if
++!--- End conditional enable of CCFM convection scheme
++
+ !
+ !
+ ! ------------------------------------------------------------------
+diff --git a/src/inictl.f90 b/src/inictl.f90
+index a912945..7058d9c 100644
+--- a/src/inictl.f90
++++ b/src/inictl.f90
+@@ -51,7 +51,10 @@ SUBROUTINE inictl
+                               nhd_diag, lhd_highres,                          &
+                               ldailysst, lmeltpond, lcouple_co2,              &
+                               ldebugs, l_volc, lroot_io, lindependent_read,   &
+-                              lcollective_write
++                              lcollective_write,                              &
++! --- Added for CCFM convection scheme
++                              lccfm
++! --- End added for CCFM convection scheme
+   USE mo_port_test,     ONLY: lport
+   USE mo_namelist,      ONLY: open_nml, position_nml, close_nml,              &
+                               POSITIONED, MISSING     
+@@ -181,6 +184,10 @@ SUBROUTINE inictl
+ 
+      CALL p_bcast (ndiahdf, p_io)
+ 
++! --- Added for CCFM convection scheme
++     CALL p_bcast (lccfm, p_io)
++! --- End added for CCFM convection scheme
++
+   ENDIF
+ 
+   ! if lresume is set via command line, ignore namelist entry
+diff --git a/src/mo_control.f90 b/src/mo_control.f90
+index 4119c78..38f8a19 100644
+--- a/src/mo_control.f90
++++ b/src/mo_control.f90
+@@ -80,6 +80,9 @@ MODULE mo_control
+ 
+   INTEGER :: nhd_diag  = 0       !   number of region for HD model diagnostics
+   LOGICAL :: l_volc    = .FALSE. !   switch for volcanic forcing
++  ! --- included for CCFM convection scheme
++  LOGICAL :: lccfm     = .FALSE.
++  ! --- end included for CCFM convection scheme
+ 
+   REAL(dp):: satoverpasstime = 10.5_dp ! satellite overpass time at 10.30 a.m. [s]
+ 
+diff --git a/src/mo_submodel.f90 b/src/mo_submodel.f90
+index 2934b9b..ae49fdf 100644
+--- a/src/mo_submodel.f90
++++ b/src/mo_submodel.f90
+@@ -146,7 +146,10 @@
+   PUBLIC :: id_isccp
+   PUBLIC :: id_sat
+   PUBLIC :: id_hrates
+-  
++  ! -- included for CCFM convection scheme
++  PUBLIC :: id_ccfm 
++  ! -- end included for CCFM convection scheme
++
+   !
+   ! interfaces
+   !                                
+@@ -241,8 +244,10 @@
+   INTEGER :: id_isccp
+   INTEGER :: id_sat
+   INTEGER :: id_hrates
+-  
+-  
++  ! -- included for CCFM convection scheme
++  INTEGER :: id_ccfm
++  ! -- end included for CCFM convection scheme
++
+   CONTAINS
+ 
+ 
+@@ -381,6 +386,10 @@
+                                no_advection,     & ! for diagnostic printout
+                                semi_lagrangian,  &
+                                tpcore
++! -- included for CCFM convection scheme
++  USE mo_control,        ONLY: lccfm
++! -- end included for CCFM convection scheme
++
+ ! local variables
+ 
+   INTEGER :: inml, iunit, ierr
+@@ -549,7 +558,9 @@
+   IF (losat)       CALL new_submodel('SAT',        id_sat      )
+   IF (loisccp)     CALL new_submodel('ISCCP',      id_isccp    )
+   IF (lsalsa)      CALL new_submodel('SALSA',      id_salsa    )
+-
++! -- included for CCFM convection scheme
++  IF (lccfm)       CALL new_submodel('CCFM_MEM',   id_ccfm     )
++! -- end included for CCFM convection scheme
+   ! report submodel status
+   
+   IF (p_parallel_io) THEN
+@@ -563,7 +574,9 @@
+      CALL print_status('HAM aerosol module', lham)
+      CALL print_status('SALSA aerosol module', lsalsa)
+      CALL print_status('MOZ chemistry module', lmoz)
+-     
++! -- included for CCFM convection scheme
++     CALL Print_status('CCFM module', lccfm)
++! -- end included for CCFM convection scheme
+      IF ( lham .AND. lmoz ) THEN
+         CALL print_status('HAMMOZ photolysis coupling', lhmzphoto)
+         CALL print_status('HAMMOZ oxidant coupling', lhmzoxi)
+diff --git a/src/mo_submodel_interface.f90 b/src/mo_submodel_interface.f90
+index 219276b..63c5322 100644
+--- a/src/mo_submodel_interface.f90
++++ b/src/mo_submodel_interface.f90
+@@ -194,6 +194,9 @@ MODULE mo_submodel_interface
+   
+   USE mo_exception,        ONLY: message, em_warn, em_info
+   USE mo_species,          ONLY: init_splist, printspec
++!zc121025
++  USE mo_control,          ONLY: lccfm
++!---end
+   USE mo_submodel,         ONLY: starttracdef, &
+                                  endtracdef, &
+                                  lmethox,  &
+@@ -205,7 +208,8 @@ MODULE mo_submodel_interface
+                                  lhammoz,  &
+                                  lhmzoxi,  &
+                                  id_ham,   &
+-                                 id_moz
++                                 id_moz,   &
++                                 id_ccfm
+ 
+ #ifdef HAMMOZ
+   USE mo_ham_init,         ONLY: start_ham, ham_define_tracer, ham_initialize
+@@ -222,6 +226,9 @@ MODULE mo_submodel_interface
+   USE mo_emi_interface,    ONLY: init_emissions
+ #endif
+ 
++!zc121025-------
++  USE mo_ccfm,             ONLY: set_ccfm
++!-----end
+ !!mgs!!   USE mo_xt,               ONLY: idm_xt, setxt, xt_define_tracers, xt_init    ! to be completed
+ 
+   ! 0) --- Preparations: initialize species list
+@@ -313,7 +320,11 @@ MODULE mo_submodel_interface
+   !--- parse emission matrix and prepare use of emissions
+   CALL init_emissions
+ #endif
+-  
++
++  !zc121025
++  IF (lccfm) CALL set_ccfm
++  !----end
++
+   END SUBROUTINE init_subm
+ 
+ 
+diff --git a/src/physc.f90 b/src/physc.f90
+index 6f14640..a409620 100644
+--- a/src/physc.f90
++++ b/src/physc.f90
+@@ -210,6 +210,9 @@ REAL(dp) :: zpbl(ldc%nproma)
+ REAL(dp) :: alpha0(ldc%nproma,nlev)
+ REAL(dp) :: geohm1(ldc%nproma,nlevp1)
+ ! 
++!----- Included for CCFM convection scheme (needs boundary layer height)
++ REAL(dp) :: zgpblh(ldc%nproma)       
++!----- End included for CCFM convection scheme
+ !  External subroutines
+ EXTERNAL :: geopot, pres, presf, vdiff, cloud, cucall, radheat, collect
+ ! 
+@@ -709,6 +712,9 @@ EXTERNAL :: geopot, pres, presf, vdiff, cloud, cucall, radheat, collect
+             , albedo_vis_dir(:,krow),     albedo_nir_dir(:,krow)               &
+             , albedo_vis_dif(:,krow),     albedo_nir_dif(:,krow)               &
+             , zpbl(:)                                                          &
++!----- included  PBL height export for CCFM convection scheme
++            , zgpblh(:)                                                        &
++!--end included  PBL height export for CCFM convection scheme
+             , tke(:,:,krow),        tkem1(:,:,krow),      tkem(:,:,krow)       &
+             , aclc(:,:,krow),       emter(:,:,krow)                            &
+             , thvvar(:,:,krow),     thvsig(:,krow)                             &
+@@ -773,6 +779,9 @@ EXTERNAL :: geopot, pres, presf, vdiff, cloud, cucall, radheat, collect
+             , albedo_vis_dir(1,krow),     albedo_nir_dir(1,krow)               &
+             , albedo_vis_dif(1,krow),     albedo_nir_dif(1,krow)               &
+             , zpbl(1)                                                          &
++!----- included  PBL height export for CCFM convection scheme
++            , zgpblh(1)                                                        &
++!--end included  PBL height export for CCFM convection scheme
+             , tke(1,1,krow),        tkem1(1,1,krow),      tkem(1,1,krow)       &
+             , aclc(1,1,krow),       emter(1,1,krow)                            &
+             , thvvar(1,1,krow),     thvsig(1,krow)                             &
+@@ -1102,8 +1111,11 @@ EXTERNAL :: geopot, pres, presf, vdiff, cloud, cucall, radheat, collect
+                 zxtecl,           zxteci,                                      &
+ !--- Included for prognostic CDNC/IC scheme (Ulrike Lohmann, 11/02/2007)--------
+                 zxtecnl,          zxtecni,                                     &
+-                tkem1(:,:,krow)                                                )
++                tkem1(:,:,krow),                                               &
+ !--- End Included --------------------------------------------------------------
++!----- included  PBL height export for CCFM convection scheme
++                zgpblh                   )
++!--end included  PBL height export for CCFM convection scheme
+ #else
+      CALL cucall(nproma, nbdim, nlev, nlevp1, nlevm1, ilab,                    &
+                 ntrac,                                                         &
+@@ -1127,8 +1139,11 @@ EXTERNAL :: geopot, pres, presf, vdiff, cloud, cucall, radheat, collect
+                 zxtecl,           zxteci,                                      &
+ !--- Included for prognostic CDNC/IC scheme (Ulrike Lohmann, 11/02/2007)--------
+                 zxtecnl,          zxtecni,                                     &
+-                tkem1(1,1,krow)                                                )
++                tkem1(1,1,krow),                                               &
+ !--- End Included --------------------------------------------------------------
++!----- included  PBL height export for CCFM convection scheme
++                zgpblh                   )
++!--end included  PBL height export for CCFM convection scheme
+ #endif
+ !
+      DO jl=kidia,kfdia       
+diff --git a/src/vdiff.f90 b/src/vdiff.f90
+index e36d0a0..132b264 100644
+--- a/src/vdiff.f90
++++ b/src/vdiff.f90
+@@ -41,6 +41,9 @@ SUBROUTINE vdiff ( kproma, kbdim, ktdia, klev, klevm1, klevp1, ktrac   &
+ !--- Included PBL top level export (Jan Kazil 10/2008)------------------
+          , ppbl                                                        &
+ !--- End included ------------------------------------------------------
++!----- included PBL height export for CCFM convection scheme ---------
++         , pgpblh                                                      &
++!----- end included PBL height export for CCFM convection scheme -----
+ ! - 2D from mo_memory_g3b
+          , ptke,           ptkem1,         ptkem                       &
+          , paclc,          pemter                                      &
+@@ -413,6 +416,10 @@ IMPLICIT NONE
+   REAL(dp) ::                                                          &
+        ppbl(kbdim)
+ !--- End included ------------------------------------------------------
++!----- included PBL height export for CCFM convection scheme ---------
++  REAL(dp) ::                                                          &
++       pgpblh(kbdim)
++!----- end included PBL height export for CCFM convection scheme -----
+   REAL(dp)::                                                           &
+        pfrl(kbdim)
+ !
+@@ -797,6 +804,9 @@ IMPLICIT NONE
+ !--- Included PBL top level export (Jan Kazil 10/2008)------------------
+         ppbl(jl) = REAL(ihpbl(jl),dp)
+ !--- End included ------------------------------------------------------
++!----- included PBL height export for CCFM convection scheme ---------
++        pgpblh(jl) = zghabl(jl) 
++!----- end included PBL height export for CCFM convection scheme -----
+      END DO
+ 
+ !
+diff --git a/include/runctl.inc b/include/runctl.inc
+index e24819a..3e5ec0c 100644
+--- a/include/runctl.inc
++++ b/include/runctl.inc
+@@ -73,7 +73,8 @@ NAMELIST /runctl/    &
+   lcollective_write, &! switch to write restart in parallel on each MPI rank
+   ndiahdf,           &! I/O unit for hdiff diagnostics
+   lcolumn,           &! Switch for Single Column Model
+-  lprint_m0           ! print cpu time for every timestep (default = F)
++  lprint_m0,         &! print cpu time for every timestep (default = F)
++  lccfm               ! enable CCFM convection scheme
+ !------------------------------------------------------------------------------
+ 
+ 

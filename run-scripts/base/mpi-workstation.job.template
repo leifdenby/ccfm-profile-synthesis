@@ -1,0 +1,274 @@
+#! /bin/bash
+#-----------------------------------------------------------------------------
+#
+#                        Job file to run ECHAM 6
+#
+#-----------------------------------------------------------------------------
+
+#-----------------------------------------------------------------------------
+#
+# If a command has a non-zero exit status, execute ERR trap, if set, and exit
+#
+set -ex
+#
+#
+echo "Time: `date`"
+echo "Running on master node: `hostname`"
+echo "Current directory: `pwd`"
+#
+CWD=`pwd`
+PROJECT_ROOT={{PROJECT_ROOT}}
+#-----------------------------------------------------------------------------
+#
+# experiment identifier (replace EEEEEE with your m2140XX and a three digit
+# number for the current experiment, TTTT replace by some text
+# EXP=EEEEETTTT (see as well above for the job names)
+#
+EXP='{{EXP_IDENTIFIER}}'   #experiment identifier
+#
+RERUN=.false.     # Rerun switch; .false. for initial run, .true. else
+#
+NPROMA=8         # Blocking length, should be large for vector architecture
+# 
+NCPUS=1          # Number of CPUS for parallel run
+NPROCA=1
+NPROCB=1
+#NTHREADS=1
+#
+RES=63          # spectral truncation of run
+LEVELS=47       # number of levels  31
+OCERES=GR15
+#
+#-----------------------------------------------------------------------------
+#
+#
+WORK_DIR=${PROJECT_ROOT}/echam/echam6.1.02p1--on-mpi-workstations/echam-6.1.02p1/
+#
+# absolute path to directory with job scripts:
+SCRIPTDIR=${WORK_DIR}run
+#
+# absolute path to directory with plenty of space:
+#EXPDIR=/scratch/tmw30/{EXP}
+EXPDIR=${PROJECT_ROOT}/output/echam/${EXP}/
+#
+# absolute path to directory with initial data:
+DATA_POOL=/pool/data
+INITIAL_DATA=${DATA_POOL}/ECHAM6/T${RES}
+INI_DATA=${DATA_POOL}/ECHAM6
+#
+# absolute path to directory with SST and sea ice files:
+BOUNDARY_DATA=${DATA_POOL}/ECHAM6/T${RES}/amip2
+#
+# absolute path to directory with initial data for JSBACH:
+INIJSB=${DATA_POOL}/ECHAM6/jsbach
+INIJSBTRANS=${DATA_POOL}/JSBACH/T${RES}
+# absolute path to model binary, including the executable
+MODEL=${WORK_DIR}/bin/echam6
+#
+#
+#
+#
+#-----------------------------------------------------------------------------
+#
+# the directory for the experiment will be created, if not already there
+if [ ! -d $EXPDIR ]; then
+    mkdir -p $EXPDIR
+fi
+#
+#-----------------------------------------------------------------------------
+#
+cd $EXPDIR           #  output and rerun files are written into $EXPDIR
+#
+#-----------------------------------------------------------------------------
+#
+# specification of files
+#
+#-----------------------------------------------------------------------------
+#
+rm -f unit.?? sst* ice* hdpara.nc hdstart.nc rrtadata rrtmg_lw.nc ECHAM6_CldOptProps.nc lctlib.def jsbach.nc ech6_ccfm_* aero* strat* ozon* swflux* greenhouse_gases.nc landuseHarvest* landuseTransition* *_OZONE_cmip5_clim.nc
+rm -f rrtmg_sw.nc
+#
+ln -s  ${INITIAL_DATA}/T${RES}L${LEVELS}_jan_spec.nc       unit.23
+#ln -s  ${INITIAL_DATA}/T${RES}TP10_jan_surf.nc             unit.24
+ln -s  ${INITIAL_DATA}/T${RES}${OCERES}_jan_surf.nc        unit.24
+#
+# NB: This is not the ozone input that Jeff originall used! (Leif 2/3/2016)
+#     Talking to Sebastian Rast this climatological mean ozone isn't used
+#     anymore, instead we should have `io3 = 4` so that the yearly files are
+#     used (as it is further down in this file)
+#
+#ln -s  ${INITIAL_DATA}/ozone2/T${RES}_OZONE_cmip5_clim.nc         unit.21
+
+ln -s  ${INITIAL_DATA}/T${RES}${OCERES}_VLTCLIM.nc         unit.90
+ln -s  ${INITIAL_DATA}/T${RES}${OCERES}_VGRATCLIM.nc       unit.91
+#ln -s  ${INITIAL_DATA}/T${RES}_O3clim2.nc                  unit.21
+#ln -s  ${INITIAL_DATA}/T${RES}_VLTCLIM.nc                  unit.90
+#ln -s  ${INITIAL_DATA}/T${RES}_VGRATCLIM.nc                unit.91
+ln -s  ${INITIAL_DATA}/T${RES}_TSLCLIM2.nc                 unit.92
+#
+ln -s  ${INI_DATA}/surrta_data                         rrtadata
+ln -s  ${INI_DATA}/rrtmg_lw.nc                         rrtmg_lw.nc
+ln -s  ${INI_DATA}/rrtmg_sw.nc                         rrtmg_sw.nc  # added for ECHAM6.3
+ln -s  ${INI_DATA}/ECHAM6_CldOptProps.nc               ECHAM6_CldOptProps.nc
+ln -s  ${INI_DATA}/hdpara.nc                           hdpara.nc
+ln -s  ${INI_DATA}/hdstart.nc                          hdstart.nc
+#
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sst_clim.nc           unit.20
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sic_clim.nc           unit.96
+#
+years="1996 1997 1998 1999 2000 2001 2002 2003 2004 2005"
+for year in $years ; do
+ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sst_${year}.nc  sst${year}
+ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sic_${year}.nc  ice${year}
+# aerosols (Kinne)
+ln -s ${INITIAL_DATA}/aero2/T${RES}_aeropt_kinne_sw_b14_coa.nc         aero_coarse_${year}.nc
+ln -s ${INITIAL_DATA}/aero2/T${RES}_aeropt_kinne_sw_b14_fin_${year}.nc aero_fine_${year}.nc
+ln -s ${INITIAL_DATA}/aero2/T${RES}_aeropt_kinne_lw_b16_coa.nc         aero_farir_${year}.nc
+# ozone
+ln -s ${INITIAL_DATA}/ozone2/T${RES}_ozone_CMIP5_${year}.nc            ozon${year}
+#solar irradiance
+ln -s ${INI_DATA}/solar_irradiance/swflux_14band_${year}.nc        swflux_${year}.nc
+# aerosols (Stenchikov)
+ln -s ${INITIAL_DATA}/volcano_aerosols/strat_aerosol_sw_T${RES}_${year}.nc strat_aerosol_sw_${year}.nc
+ln -s ${INITIAL_DATA}/volcano_aerosols/strat_aerosol_ir_T${RES}_${year}.nc strat_aerosol_ir_${year}.nc
+# jsbach transitions
+ln -s ${INIJSBTRANS}/land_use/LUH_harvest_T${RES}_${year}.nc                  landuseHarvest.${year}.nc
+ln -s ${INIJSBTRANS}/land_use/LUH_transitions_T${RES}_${year}.nc              landuseTransitions.${year}.nc
+done
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sst_1979.nc  sst2005
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sst_1979.nc  sst2006
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sst_1979.nc  sst2007
+
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sic_1979.nc  ice2005
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sic_1979.nc  ice2006
+#ln -s  ${BOUNDARY_DATA}/T${RES}_amip2sic_1979.nc  ice2007
+# greenhouse gases
+#
+ln -s ${INI_DATA}/greenhouse_rcp45.nc                greenhouse_gases.nc
+#
+ln -s  ${INIJSB}/lctlib_nlct21.def_rev6931                     lctlib.def # = lctlib_nlct21.def_rev4154
+#ln -s  ${INIJSBTRANS}/jsbach.nc                                     jsbach.nc
+#ln -s  ${INIJSBTRANS}/jsbach_T${RES}${OCERES}_11tiles_1976.nc       jsbach.nc
+ln -s  ${INIJSBTRANS}/jsbach_T${RES}TP04_11tiles_1992.nc       jsbach.nc
+
+# Symlink the forcing file
+rm -f scm_forcing.nc
+ln -s {{SCM_FORCING_FILENAME}} scm_forcing.nc
+
+#-----------------------------------------------------------------------------
+#
+# ECHAM6 namelist
+#   - for production runs set LABORT=.FALSE.
+#
+cat > namelist.echam << EOF
+&parctl
+  nproca       = ${NPROCA}
+  nprocb       = ${NPROCB}
+/
+&runctl
+  out_datapath = "${EXPDIR}/"
+  out_expname  = "${EXP}"
+  out_filetype = 2                  ! 1 - GRIB1, 2 - netCDF
+  rerun_filetype = 4
+  lresume      = $RERUN
+  lamip        = .true.
+  !dt_start     = 1997,06,18,20,0,0
+  dt_start     = {{DT_START}}
+  !dt_stop      = 1997,07,18,02,0,0
+  dt_stop      = {{DT_STOP}}
+  putrerun     = 120, 'months','first',  0
+  putdata      = 10800, 'seconds', 'first', 0
+  trigfiles    = 12, 'months', 'last', 0
+  lcolumn      = .true.
+  DELTA_TIME   = 600  !720
+  nproma       = ${NPROMA}
+  lmidatm      = .true. !false
+  lmeltpond    = .false.
+!  lipcc        = .false. ! not present in ECHAM6.3?
+!  ldebugs      = .true.
+/
+&physctl
+!  lcover       = .false. disabled for ECHAM6.3
+  lphys       = .true.
+  lconv       = .true.
+!  iconv       = 2
+/
+&radctl
+  iaero        = 3
+  lradforcing  = T,T
+  trigrad      = 2, 'hours', 'first', 0
+  isolrad      = 1
+  io3          = 4
+  ico2         = 4
+  in2o         = 4
+  ich4         = 4
+  icfc         = 4
+  ighg         = 1
+/
+&submodelctl
+!  lco2         = .true.
+/
+&columnctl
+! sgp_3 for total forcing omega 0,0
+ forcingfile = 'scm_forcing.nc'
+ nfor_omega  = 0,0
+! sgp for horizontal forcing omega 1,0
+! forcingfile = 'sgp_1997_47.nc'
+! nfor_omega  = 1,0
+ nfor_t      = 1,0,0
+ nfor_uv     = 0,1,0
+ nfor_ts     = 1,0
+ nfor_q      = 1,0,0
+! nfor_div  = 1,0
+! nfor_lhf    = 1,0
+! nfor_shf    = 1,0
+ mld         = 10.0 
+/
+&debugsctl
+!  putdebug_stream = 1, 'steps','first',0
+/
+EOF
+
+cat > namelist.jsbach <<EOF
+&jsbach_ctl
+  standalone    = .false.
+  ntiles        = 11                   ! --- number of tiles ---
+  ! --- options to activate the different jsbach modules ---
+  use_bethy     = .true.
+  use_phenology = .true.
+  use_albedo    = .true.
+  use_dynveg    = .false.
+  ! --- output options ---
+  ! file_type     = "grib"  ! disabled for ECHAM6.3
+  lpost_echam   = .false.
+  debug         = .false.
+/
+&albedo_ctl
+  use_albedocanopy = .false.
+/
+&cbalance_ctl
+  read_cpools = .false.
+/
+&dynveg_ctl
+  read_fpc = .false.
+  dynveg_feedback = .false.
+/
+&climbuf_ctl
+  init_running_means = .false.
+/
+EOF
+#
+#-----------------------------------------------------------------------------
+#
+#
+#mpirun -tv -np $NCPUS  $MODEL 1> $EXP.log 2> $EXP.err
+#mpiexec -tv -np 4 $MODEL 1> $EXP.log 2> $EXP.err
+#totalview $MODEL 1> $EXP.log 2> $EXP.err
+$MODEL 1> $EXP.log 2> $EXP.err
+#-----------------------------------------------------------------------------
+#
+exit
+#
+#-----------------------------------------------------------------------------
+ 
+ 

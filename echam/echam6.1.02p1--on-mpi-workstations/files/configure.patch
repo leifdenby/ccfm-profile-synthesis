@@ -1,0 +1,18 @@
+Index: configure
+===================================================================
+--- configure	(revision 4307)
++++ configure	(working copy)
+@@ -3921,12 +3921,7 @@
+   as_fn_error $? "ZLIBROOT not properly defined" "$LINENO" 5
+ fi
+ 
+-  if test -r "$ZLIBROOT/lib/libz.a" ; then
+-     ZLIB_LIB='-L$(ZLIBROOT)/lib -lz'
+-  else
+-     echo "cannot read $ZLIBROOT/lib/libz.a"
+-     exit 1
+-  fi
++ZLIB_LIB='-L$(ZLIBROOT)/lib -lz'
+   if test -d "$ZLIBROOT/include" ; then
+      ZLIB_INCLUDE='-I$(ZLIBROOT)/include'
+   else

@@ -1,0 +1,9 @@
+Given SCM forcing files for ECHAM the purpose of this project is to create
+input profiles that can be used in ATHAM and CCFM.
+
+
+Steps:
+
+1. Run ECHAM SCM
+2. Identify days of particularly high convective precipitation
+3. Extract profiles and tendencies and produce CCFM autonomous profile files

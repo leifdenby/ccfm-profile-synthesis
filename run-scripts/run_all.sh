@@ -1,0 +1,12 @@
+export LD_LIBRARY_PATH=/sw/wheezy-x64/mpilib/mvapich2-2.1a-static-gcc51/lib:$LD_LIBRARY_PATH
+bash all/echam6-L47-scm-forcing__sgp-1997-summer.job
+bash all/echam6-L47-scm-forcing__sgp-1997-fall.job
+bash all/echam6-L47-scm-forcing__sgp-1999-winter.job
+bash all/echam6-L47-scm-forcing__sgp-1997-spring.job
+bash all/echam6-L47-scm-forcing__sgp-1998-spring.job
+bash all/echam6-L47-scm-forcing__sgp-2000-spring.job
+bash all/echam6-L47-scm-forcing__sgp-1999-spring.job
+bash all/echam6-L47-scm-forcing__sgp-2000-fall.job
+bash all/echam6-L47-scm-forcing__sgp-1999-summer.job
+bash all/echam6-L47-scm-forcing__sgp-2000-fall2.job
+bash all/echam6-L47-scm-forcing__sgp-2003-spring.job

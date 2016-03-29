@@ -1,0 +1,232 @@
+#-----------------------------------------------------------------------------
+#
+# AMD64/EMT64/Linux
+#
+#-----------------------------------------------------------------------------
+#
+# Define site dependend library paths
+#
+case "$ac_sitename" in
+    dkrz.de)
+        case "$host" in 
+            x86_64-*-linux-*)         # tornado
+                POSTGRESQLROOT = /sw/sles10-x64/postgresql-9.0.2
+	        NETCDFROOT     = /sw/sles10-x64/netcdf-4.0.1
+		HDF5ROOT       = /sw/sles10-x64/hdf5-1.8.2
+                SZIPROOT       = /sw/sles10-x64/szip-2.1-static
+                ZLIBROOT       = /sw/sles10-x64/zlib-1.2.3
+                case "$fortran_compiler" in
+                    nag)
+                        IB_LIBS    = -lrdmacm -libverbs -lnuma -ldl -Wl,--export-dynamic -lnsl -lutil -lm -ldl
+                        MPIROOT    = /sw/sles10-x64/ofed/openmpi-1.4.0-nag52
+                        MPI_LIB    = -Wl,-pthread -lmpi_f90 -lmpi_f77 -lmpi -lopen-rte -lopen-pal "$IB_LIBS"
+                        ;;
+                    gcc)
+                        IB_LIBS    = -lrdmacm -libverbs -lnuma -ldl -Wl,--export-dynamic -lnsl -lutil -lm -ldl
+                        MPIROOT    = /sw/sles10-x64/ofed/openmpi-1.4.0-gcc43
+                        MPI_LIB    = -WL,-pthread -lmpi_f90 -lmpi_f77 -lmpi -lopen-rte -lopen-pal "$IB_LIBS"
+                        ;;
+                    default|pgi)
+                        IB_LIBS    = -lrdmacm -libverbs -lnuma -ldl -Wl,--export-dynamic -lnsl -lutil -lm -ldl
+                        MPIROOT    = /sw/sles10-x64/ofed/openmpi-1.4.0-pgi9
+                        MPI_LIB    = -lmpi_f90 -lmpi_f77 -lmpi -lopen-rte -lopen-pal "$IB_LIBS" 
+                        fortran_compiler=pgi
+                        ;;
+                    intel)
+                        IB_LIBS    = -lrdmacm -libverbs -lnuma -ldl -Wl,--export-dynamic -lnsl -lutil -lm -ldl
+                        MPIROOT    = /sw/sles10-x64/ofed/openmpi-1.4.0-intel11
+                        MPI_LIB    = -Bstatic -lmpi_f90 -lmpi_f77 -lmpi -lopen-rte -lopen-pal -Bdynamic "$IB_LIBS" 
+                        ;;
+                    sun)
+                        echo
+                        echo
+                        echo Sun/Oracle compiler not supported anymore
+                        echo
+		        exit
+                        # 
+                        ;;                
+                esac
+                ;;
+        esac
+        ;;
+    zmaw.de)
+        case "$host" in 
+            i686-*-linux-*)           # MPI/ZMAW workstation
+                # temporary disabled 
+                echo
+                echo
+                echo i686-*-linux-* not supported yet
+                echo
+		exit
+                # 
+		;;
+            x86_64-*-linux-*)         # squall                
+                POSTGRESQLROOT = /usr
+		HDF5ROOT       = /sw/wheezy-x64/hdf5-1.8.13-static-gccsys
+                SZIPROOT       = /sw/wheezy-x64/szip-2.1-static-gccsys
+                ZLIBROOT       = /usr
+                case "$fortran_compiler" in
+                    default|nag)
+                        NETCDFROOT = /sw/lenny-x64/netcdf-4.1.1-static-nag52
+                        MPIROOT    = /sw/lenny-x64/mpi/mpich2-1.3.1-static-nag52
+                        MPI_LIB    = -lmpichf90 -lmpich -lopa -lmpl -lpthread -lrt
+                        fortran_compiler=nag
+                        ;;
+                    gcc)
+                        NETCDFROOT = /sw/wheezy-x64/netcdf_fortran-4.4.2-static-gcc51/
+                        MPIROOT    = /sw/wheezy-x64/mpilib/mvapich2-2.1a-static-gcc51
+                        MPI_LIB    = -lmpichf90 -lmpich -lopa -lmpl -lpthread -lrt
+                        ;;
+                    pgi)
+                        NETCDFROOT = /sw/lenny-x64/netcdf-4.1.1-static-pgi11
+                        MPIROOT    = /sw/lenny-x64/mpi/mpich2-1.3.1-static-pgi11
+                        MPI_LIB    = -lmpichf90 -lmpich -lopa -lmpl -lpthread -lrt
+                        ;;
+                    intel)
+                        NETCDFROOT = /sw/lenny-x64/netcdf-4.1.1-static-intel12
+                        MPIROOT    = /sw/lenny-x64/mpi/mpich2-1.3.1-static-intel12
+                        MPI_LIB    = -lmpichf90 -lmpich -lopa -lmpl -lpthread -lrt
+                        ;;
+                    sun)
+                        echo
+                        echo
+                        echo Sun/Oracle compiler not supported anymore
+                        echo
+		        exit
+                        # 
+                        ;;			
+                esac
+                ;;
+        esac
+        ;;
+esac
+#
+#-----------------------------------------------------------------------------
+#
+case $fortran_compiler in
+#
+#-----------------------------------------------------------------------------
+# NAG f95 - this is for testing and debugging
+
+nag)
+
+    ARCH     = LINUX
+
+    CC       = gcc
+    CFLAGS   = -std=gnu99 -march=native -O -DNAGf90Fortran -g
+
+    F90      = nagfor
+    FFLAGS   = -w=obs -O
+    F90FLAGS = -colour -O0 -C=all -maxcontin=99 -f2003 -float-store -nan -gline -g -fpp -D__NAG -DARGCHECK -wmismatch=mpi_bcast,mpi_send,mpi_recv,mpi_isend,mpi_irecv,mpi_allreduce,mpi_get_address,mpi_gather,nf_get_var_double,nf_put_var_double,nf_def_var,nf_put_vara_double,dgemm -Wc,-pthread
+
+    DEFOPT   = -D
+    MODOPT   = -I
+
+    SRCDIRS  = blas lapack
+
+    LIBS     = -L../lib -lsupport -llapack -lblas
+
+    ;;
+
+#-----------------------------------------------------------------------------
+# GCC gfortran - this is for testing and debugging
+
+gcc)
+
+    ARCH     = LINUX
+
+    CC       = gcc
+    CFLAGS   = -std=gnu99 -march=native -O2 -DpgiFortran -g
+
+    F90      = gfortran
+    FFLAGS   = -march=native -O  -fomit-frame-pointer -ffast-math
+
+    FCPP     = -xf95-cpp-input
+    FWARN    = -Wall -Wcharacter-truncation -Wconversion -Wunderflow -Wunused-parameter
+    FDEBUG   = -g -fbacktrace
+    FCHECK   = -finit-real=nan
+    FOPTIONS = "$FCPP" "$FWARN" "$FDEBUG" "$FCHECK"
+
+    F90FLAGS = -march=native -O  -fomit-frame-pointer -ffast-math "$FOPTIONS"
+
+    DEFOPT   = -D
+    MODOPT   = -I
+
+    SRCDIRS  = blas lapack
+
+    LIBS     = -static-libgfortran -L../lib -lsupport -llapack -lblas
+
+    ;;
+
+#-----------------------------------------------------------------------------
+# PGI pgf95
+
+pgi) 
+
+    ARCH     = LINUX
+
+    CC       = gcc
+    CFLAGS   = -std=gnu99 -march=native -O -DpgiFortran 
+
+    F90      = pgf95
+    FFLAGS   = -O3 -Kieee -Mpreprocess -tp amd64e
+    F90FLAGS = -O3 -Kieee -Mpreprocess -tp amd64e 
+
+    DEFOPT   = -D
+    MODOPT   = -I
+
+    SRCDIRS  = blas lapack
+
+    LIBS     = -L../lib -lsupport  -llapack -lblas
+
+    ;;
+ 
+#-----------------------------------------------------------------------------
+# Intel ifort
+
+intel)
+    
+    ARCH     = LINUX
+
+    CC       = gcc
+    CFLAGS   = -std=gnu99 -march=native -O -DpgiFortran -g
+
+    F90      = ifort
+    FFLAGS   = -msse2 -mieee-fp -O1 -g
+    F90FLAGS = -msse2 -mieee-fp -O1 -g -fpp 
+
+    DEFOPT   = -D
+    MODOPT   = -I
+
+    SRCDIRS  = blas lapack
+    LIBS     = -L../lib -lsupport -llapack -lblas
+
+    ;;
+
+#-----------------------------------------------------------------------------
+# Sun f95 
+
+sun)
+
+    ARCH     = LINUX
+
+    CC       = gcc
+    CFLAGS   = -std=gnu99 -march=native -O -DpgiFortran -g 
+
+    F90      = sunf95
+    FFLAGS   = -fast -fsimple=1 -g
+    F90FLAGS = -fast -fsimple=1 -g -fpp -DHAVE_LIBNETCDF64
+
+    DEFOPT   = -D
+    MODOPT   = -M
+
+    SRCDIRS  = blas lapack
+    LIBS     = -L../lib -lsupport -llapack -lblas
+
+    ;;
+
+#-----------------------------------------------------------------------------
+#
+esac
+#
+#-----------------------------------------------------------------------------
